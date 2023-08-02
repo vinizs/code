@@ -1,3 +1,10 @@
+"""Python script to validate end-to-end execution of Customer.IO Data Load Automation.
+Please read the feature doc first:
+https://workhuman.atlassian.net/wiki/spaces/HUMAN/pages/9635856400/Customer.IO+Data+Load+Automation
+
+This script contains the functions used by test_segment_e2e.py (pytest) script.
+Its functions are independent, but represent the whole flow of the feature."""
+
 from customerio import CustomerIO, Regions
 from datetime import datetime, timedelta
 from config import *
@@ -7,7 +14,6 @@ import boto3
 import uuid
 import time
 import json
-import sys
 import csv
 import os
 
@@ -20,16 +26,6 @@ import os
 # # AWS
 # aws_profile = "XYZ"
 ###############################
-
-try:
-    # Customer.io
-    cio_api_key_arg = sys.argv[1]
-    cio_site_id_arg = sys.argv[2]
-    cio_track_api_key_arg = sys.argv[3]
-    # AWS
-    aws_profile_arg = sys.argv[4]
-except Exception:
-    None
 
 # Change key as required for testing
 # This will be used to create the folder and read local file(without extension)
@@ -75,21 +71,9 @@ new_csv_file = """client_id,id,action
 
 ##########################################################
 
-# development test function. not to be used
-def check_cred():
-    print("test cred base")
-    print(sys.argv)
-    try:
-        print(cio_api_key_arg)
-        print(cio_site_id_arg)
-        print(cio_track_api_key_arg)
-        print(aws_profile_arg)
-    except Exception:
-        None
-    return False
-
 
 def check_logs():
+    """This functions check the CloudWatch logs in the end of the process, looking for error messages."""
     # Get log streams in log group
     error = 0
     log_streams_response = logs.describe_log_streams(
@@ -134,6 +118,8 @@ def check_logs():
 
 
 def check_cio():
+    """This function checks if the segment was created successfully in Customer.io.
+    It also deletes it after confirmation."""
     segment_name = new_key + date_time
     conn = http.client.HTTPSConnection(cio_api_url)
     headers = {'Authorization': "Bearer " + cio_api_key + ""}
@@ -167,6 +153,7 @@ def check_cio():
 
 
 def delete_user_cio():
+    """This function deletes the dummy user from Customer.io for tests purposes."""
     cio.delete(customer_id=str(cio_uuid))
     conn = http.client.HTTPSConnection(cio_api_url)
     headers = {'Authorization': "Bearer " + cio_api_key + ""}
@@ -193,6 +180,7 @@ def delete_user_cio():
 
 
 def add_user_cio():
+    """This function adds a dummy user into Customer.io for tests purposes."""
     cio.identify(id=cio_uuid, email='AutoHEMarvels@workhuman.com', first_name='AutoHEMarvels')
     conn = http.client.HTTPSConnection(cio_api_url)
     headers = {'Authorization': "Bearer " + cio_api_key + ""}
@@ -215,6 +203,8 @@ def add_user_cio():
 
 
 def check_csv_lines():
+    """This function checks if a csv file was created, with content, and replace it with a dummy Customer.io user id.
+    It also returns the number of lines downloaded from redshift, for comparison purposes."""
     count = 0
     try:
         data = s3.get_object(Bucket=bucket, Key=path + new_key + date_time + "/" + new_key + ".csv")
@@ -233,6 +223,7 @@ def check_csv_lines():
 
 
 def check_glue(job_name):
+    """This function checks if the glue job was started successfully within 1 minute of being triggered."""
     timeout = time.time() + 60 * 1  # X min from now to wait for the job to start
     running = 0
     succeeded = 0
@@ -262,6 +253,7 @@ def check_glue(job_name):
 
 
 def check_lambda():
+    """This function checks if the lambda function was started successfully within 2 minutes of being triggered."""
     mins = 2
     current_time = datetime.now()
     x_minutes_ago = current_time - timedelta(minutes=mins)
@@ -282,6 +274,7 @@ def check_lambda():
 
 
 def delete_folder(full_path):
+    """This function deletes the S3 bucket folder and its contents after the test is finished."""
     response = s3.list_objects_v2(Bucket=bucket, Prefix=full_path)
     if 'Contents' in response:
         # Delete each object within the folder, including folder
@@ -301,6 +294,7 @@ def delete_folder(full_path):
 
 
 def check_file_created(file_ext):
+    """This auxiliary function checks if the file was successfully created in the S3 bucket."""
     try:
         _ = s3.get_object(Bucket=bucket, Key=path + new_key + date_time + "/" + new_key + file_ext)
         return True
@@ -309,12 +303,15 @@ def check_file_created(file_ext):
 
 
 def get_file_path(file_name):
+    """This auxiliary function creates the absolut file path to be used within the script."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, 'files', file_name)
     return file_path
 
 
 def upload_file(file_ext, file_content):
+    """In order to trigger the lambda function, expected files need to be uploaded into the S3 bucket.
+    This function reads the file extention and file content."""
     # create folder
     s3.put_object(Bucket=bucket, Key=(path + new_key + date_time + '/'))
     # upload file
@@ -340,4 +337,3 @@ def upload_file(file_ext, file_content):
 # main
 if __name__ == '__main__':
     None
-    check_cred()
